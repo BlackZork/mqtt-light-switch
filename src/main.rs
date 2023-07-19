@@ -1,4 +1,5 @@
 use rumqttc::{MqttOptions, Client};
+use rumqttc::Event::{Incoming, Outgoing};
 
 mod switch;
 use switch::Switch;
@@ -22,8 +23,12 @@ fn main() {
         switch.add_subscriptions(&mut client);
     }
 
-
     for (_i, notification) in connection.iter().enumerate() {
         println!("Notification = {:?}", notification);
+        let event = notification.unwrap();
+        match event {
+            Incoming(evt) => { println!("Incoming event = {:?}", evt) }
+            Outgoing(evt) => { println!("Outgoing event = {:?}", evt) }
+        }
     }    
 }
