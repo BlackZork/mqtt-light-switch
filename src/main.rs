@@ -1,5 +1,6 @@
-use rumqttc::{MqttOptions, Client};
-use rumqttc::Event::{Incoming, Outgoing};
+use rumqttc::{MqttOptions, Client, Packet};
+use rumqttc::Event;
+
 
 mod switch;
 use switch::Switch;
@@ -24,11 +25,13 @@ fn main() {
     }
 
     for (_i, notification) in connection.iter().enumerate() {
-        println!("Notification = {:?}", notification);
+        //println!("Notification = {:?}", notification);
         let event = notification.unwrap();
-        match event {
-            Incoming(evt) => { println!("Incoming event = {:?}", evt) }
-            Outgoing(evt) => { println!("Outgoing event = {:?}", evt) }
+        if let Event::Incoming(evt) = event {
+            //println!("Incoming event = {:?}", evt);
+            if let Packet::Publish(data) = evt {
+                println!("publish = {:?}", data.topic);
+            }
         }
     }    
 }
