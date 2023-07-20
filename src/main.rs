@@ -13,25 +13,7 @@ fn main() {
 
     let (mut client, mut connection) = Client::new(mqttoptions, 10);
     
-    
-    let mut config_file = File::open("/etc/mqtt-light-switch.yaml").expect("Unable to open config file");
-    let mut config_data = String::new();
-    config_file.read_to_string(&mut config_data).expect("Cannot read config file");
-    let docs = YamlLoader::load_from_str(&config_data).unwrap();
-
-    let doc = &docs[0];
-    let cf_switches = doc["switches"].as_vec().unwrap();
-
-
-    let mut switches: Vec<Switch> = Vec::new();
-    for cf_switch in cf_switches {
-        let s = Switch::new(
-            cf_switch["counter_topic"].as_str().unwrap(),
-            cf_switch["light_state_topic"].as_str().unwrap(),
-            cf_switch["light_command_topic"].as_str().unwrap()
-        );
-        switches.push(s);
-    }
+    let mut switches: Vec<Switch> = read_config();
 
     for switch in &switches {
         switch.add_subscriptions(&mut client);
@@ -62,3 +44,27 @@ fn main() {
     }    
 }
 
+
+fn read_config() -> Vec<Switch> {
+    let mut config_file = File::open("/etc/mqtt-light-switch.yaml").expect("Unable to open config file");
+    let mut config_data = String::new();
+    config_file.read_to_string(&mut config_data).expect("Cannot read config file");
+    let docs = YamlLoader::load_from_str(&config_data).unwrap();
+
+    let doc = &docs[0];
+    let cf_switches = doc["switches"].as_vec().unwrap();
+
+
+    let mut switches: Vec<Switch> = Vec::new();
+    for cf_switch in cf_switches {
+        let s = Switch::new(
+            cf_switch["counter_topic"].as_str().unwrap(),
+            cf_switch["light_state_topic"].as_str().unwrap(),
+            cf_switch["light_command_topic"].as_str().unwrap()
+        );
+        println!("Configured light switch {:?}", s.light_state_topic);
+        switches.push(s);
+    }
+
+    return switches;
+}
