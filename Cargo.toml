@@ -9,6 +9,7 @@ edition = "2021"
 clap = { version = "4.3.17", features = ["derive"] }
 log = "0.4.19"
 rumqttc = "0.17.0"
+signal-hook = "0.3.17"
 stderrlog = "0.5.4"
 yaml-rust = "0.4"
 

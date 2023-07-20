@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::path::Path;
 use clap::Parser;
 use log::*;
+use signal_hook::{consts::SIGTERM, iterator::Signals};
 
 
 mod switch;
@@ -22,7 +23,6 @@ struct Cli {
     #[arg(short, long, action = clap::ArgAction::Count)]
     verbose: u8
 }
-
 
 fn main() {
     let cli = Cli::parse();
@@ -83,7 +83,9 @@ fn do_work(mut switches: Vec<Switch>) {
         switch.add_subscriptions(&mut client);
     }
 
-    for (_i, notification) in connection.iter().enumerate() {
+    let mut signals = Signals::new(&[SIGTERM]).unwrap();
+   
+    'main: for (_i, notification) in connection.iter().enumerate() {
         trace!("Notification = {:?}", notification);
         let event = notification.unwrap();
         if let Event::Incoming(evt) = event {
@@ -101,6 +103,12 @@ fn do_work(mut switches: Vec<Switch>) {
                         error!("Error converting payload from {:?}: {:?}", packet.topic, e);
                     }
                 }
+            }
+        }
+        for sig in signals.pending() {
+            debug!("Recevied signal {:?}", sig);
+            if sig == SIGTERM {
+                break 'main;
             }
         }
     }    
