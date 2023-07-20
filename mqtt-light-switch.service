@@ -1,0 +1,9 @@
+[Unit]
+Description=MQTT light switch driver
+After=network.target
+
+[Service]
+ExecStart=/bin/mqtt-light-switch --config=/etc/mqtt-light-switch.yaml
+
+[Install]
+WantedBy=multi-user.target

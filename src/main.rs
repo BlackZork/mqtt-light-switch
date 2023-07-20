@@ -5,7 +5,7 @@ use std::path::Path;
 use std::thread;
 use rumqttc::{MqttOptions, Client, Packet};
 use rumqttc::Event;
-use yaml_rust::YamlLoader;
+use yaml_rust::{Yaml, YamlLoader};
 use clap::Parser;
 use log::*;
 use signal_hook::{consts::SIGTERM, iterator::Signals};
@@ -24,6 +24,11 @@ struct Cli {
 
     #[arg(short, long, action = clap::ArgAction::Count)]
     verbose: u8
+}
+
+struct MqttConfig {
+    host: String,
+    port: u16
 }
 
 fn main() {
@@ -45,22 +50,37 @@ fn main() {
 
     info!("Using configuration file {:?}", config_path);
 
-    let switches: Vec<Switch> = read_config(config_path);
+    let config = read_config(config_path); 
+
+    let mqtt_config = read_mqtt_config(&config);
+    let switches: Vec<Switch> = read_switch_config(&config);
 
     info!("Starting switch action loop for {:?} switches", switches.len());
-    do_work(switches);
+    do_work(mqtt_config, switches);
     info!("Finished");
 }
 
-fn read_config(config_path: &Path) -> Vec<Switch> {
+fn read_config(config_path: &Path) -> Yaml {
     let mut config_file = File::open(config_path).expect("Unable to open config file");
     let mut config_data = String::new();
     config_file.read_to_string(&mut config_data).expect("Cannot read config file");
     let docs = YamlLoader::load_from_str(&config_data).unwrap();
 
     let doc = &docs[0];
-    let cf_switches = doc["switches"].as_vec().unwrap();
+    return doc.clone();
+}
 
+fn read_mqtt_config(doc: &Yaml) -> MqttConfig {
+    let conf = &doc["mqtt_config"];
+
+    return MqttConfig {
+        host: String::from(conf["host"].as_str().unwrap()),
+        port: u16::try_from(conf["port"].as_i64().unwrap()).unwrap()
+    }
+}
+
+fn read_switch_config(doc: &Yaml) -> Vec<Switch> {
+    let cf_switches = doc["switches"].as_vec().unwrap();
 
     let mut switches: Vec<Switch> = Vec::new();
     for cf_switch in cf_switches {
@@ -76,8 +96,8 @@ fn read_config(config_path: &Path) -> Vec<Switch> {
     return switches;
 }
 
-fn do_work(mut switches: Vec<Switch>) {
-    let mqttoptions = MqttOptions::new("mqtt-light-switches", "zork.pl", 1883);
+fn do_work(mqtt_config: MqttConfig, mut switches: Vec<Switch>) {
+    let mqttoptions = MqttOptions::new("mqtt-light-switches", mqtt_config.host, mqtt_config.port);
 
     let (mut client, mut connection) = Client::new(mqttoptions, 10);
     
