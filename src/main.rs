@@ -1,32 +1,37 @@
 use rumqttc::{MqttOptions, Client, Packet};
 use rumqttc::Event;
+use yaml_rust::YamlLoader;
+use std::fs::File;
+use std::io::Read;
 
 
 mod switch;
 use switch::Switch;
 
 fn main() {
-    let mqttoptions = MqttOptions::new("mqtt-light-switches", "localhost", 1883);
+    let mqttoptions = MqttOptions::new("mqtt-light-switches", "zork.pl", 1883);
 
     let (mut client, mut connection) = Client::new(mqttoptions, 10);
     
-    let mut switches: Vec<Switch> = Vec::new();
     
-    let switch1 = Switch::new(
-        "bedroom/switch/ceiling_door/state",
-        "bedroom/light/ceiling_door/state",
-        "bedroom/light/ceiling_door/set"
-    );
+    let mut config_file = File::open("/etc/mqtt-light-switch.yaml").expect("Unable to open config file");
+    let mut config_data = String::new();
+    config_file.read_to_string(&mut config_data).expect("Cannot read config file");
+    let docs = YamlLoader::load_from_str(&config_data).unwrap();
 
-    let switch2 = Switch::new(
-        "bedroom/switch/ceiling_window/state",
-        "bedroom/light/ceiling_window/state",
-        "bedroom/light/ceiling_window/set"
-    );
+    let doc = &docs[0];
+    let cf_switches = doc["switches"].as_vec().unwrap();
 
 
-    switches.push(switch1);
-    switches.push(switch2);
+    let mut switches: Vec<Switch> = Vec::new();
+    for cf_switch in cf_switches {
+        let s = Switch::new(
+            cf_switch["counter_topic"].as_str().unwrap(),
+            cf_switch["light_state_topic"].as_str().unwrap(),
+            cf_switch["light_command_topic"].as_str().unwrap()
+        );
+        switches.push(s);
+    }
 
     for switch in &switches {
         switch.add_subscriptions(&mut client);
@@ -47,7 +52,7 @@ fn main() {
                         }    
                     },
                     Err(e) => {
-                        println!("Error converting payload from {:?}", packet.topic);
+                        println!("Error converting payload from {:?}: {:?}", packet.topic, e);
                     }
                 }
                 // println!("publish = {:?}", data.topic);

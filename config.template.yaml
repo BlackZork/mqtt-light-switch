@@ -1,0 +1,8 @@
+switches:
+  - counter_topic: "bedroom/switch/ceiling_door/state"
+    light_state_topic: "bedroom/light/ceiling_door/state"
+    light_command_topic: "bedroom/light/ceiling_door/set"
+
+  - counter_topic: "bedroom/switch/ceiling_window/state"
+    light_state_topic: "bedroom/light/ceiling_window/state"
+    light_command_topic: "bedroom/light/ceiling_window/set"
