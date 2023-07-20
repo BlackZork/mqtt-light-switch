@@ -27,13 +27,27 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
 
+    let verbosity: usize = 2 + usize::from(cli.verbose);
+
+    stderrlog::new()
+        .module(module_path!())
+        .verbosity(verbosity)
+        .init()
+        .unwrap();
+
+
     let mut config_path = Path::new("/etc/mqtt-light-switch.yaml");
     if let Some(arg_config_path) = cli.config.as_deref() {
         config_path = arg_config_path;
     }
 
+    info!("Using configuration file {:?}", config_path);
+
     let switches: Vec<Switch> = read_config(config_path);
+
+    info!("Starting switch action loop for {:?} switches", switches.len());
     do_work(switches);
+    info!("Finished");
 }
 
 fn read_config(config_path: &Path) -> Vec<Switch> {
@@ -53,7 +67,7 @@ fn read_config(config_path: &Path) -> Vec<Switch> {
             cf_switch["light_state_topic"].as_str().unwrap(),
             cf_switch["light_command_topic"].as_str().unwrap()
         );
-        println!("Configured light switch {:?}", s.light_state_topic);
+        trace!("Configured light switch {:?}", s.light_state_topic);
         switches.push(s);
     }
 
@@ -70,7 +84,7 @@ fn do_work(mut switches: Vec<Switch>) {
     }
 
     for (_i, notification) in connection.iter().enumerate() {
-        println!("Notification = {:?}", notification);
+        trace!("Notification = {:?}", notification);
         let event = notification.unwrap();
         if let Event::Incoming(evt) = event {
             //println!("Incoming event = {:?}", evt);
@@ -78,17 +92,15 @@ fn do_work(mut switches: Vec<Switch>) {
                 let data_result = String::from_utf8(packet.payload.to_vec());
                 match data_result {
                     Ok(data) => {
-                        //println!("{:?}: {:?}", packet.topic, data);
+                        trace!("{:?}: {:?}", packet.topic, data);
                         for switch in switches.iter_mut() {
                             switch.process(&mut client, &packet, &data);
                         }    
                     },
                     Err(e) => {
-                        println!("Error converting payload from {:?}: {:?}", packet.topic, e);
+                        error!("Error converting payload from {:?}: {:?}", packet.topic, e);
                     }
                 }
-                // println!("publish = {:?}", data.topic);
-                // println!("publish = {:?}", String::from_utf8(data.payload.to_vec()));
             }
         }
     }    
