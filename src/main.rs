@@ -108,6 +108,7 @@ fn do_work(mut switches: Vec<Switch>) {
         for sig in signals.pending() {
             debug!("Recevied signal {:?}", sig);
             if sig == SIGTERM {
+                client.disconnect().unwrap();
                 break 'main;
             }
         }
