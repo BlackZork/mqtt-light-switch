@@ -1,13 +1,15 @@
-use rumqttc::{MqttOptions, Client, Packet};
-use rumqttc::Event;
-use yaml_rust::YamlLoader;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 use std::path::Path;
+use std::thread;
+use rumqttc::{MqttOptions, Client, Packet};
+use rumqttc::Event;
+use yaml_rust::YamlLoader;
 use clap::Parser;
 use log::*;
 use signal_hook::{consts::SIGTERM, iterator::Signals};
+
 
 
 mod switch;
@@ -85,38 +87,43 @@ fn do_work(mut switches: Vec<Switch>) {
 
     let mut signals = Signals::new(&[SIGTERM]).unwrap();
    
-
-   
-    'main: for (_i, notification) in connection.iter().enumerate() {
-        trace!("Notification = {:?}", notification);
-        match notification {
-            Ok(event) => {
-                if let Event::Incoming(evt) = event {
-                    //println!("Incoming event = {:?}", evt);
-                    if let Packet::Publish(packet) = evt {
-                        let data_result = String::from_utf8(packet.payload.to_vec());
-                        match data_result {
-                            Ok(data) => {
-                                trace!("{:?}: {:?}", packet.topic, data);
-                                for switch in switches.iter_mut() {
-                                    switch.process(&mut client, &packet, &data);
-                                }    
-                            },
-                            Err(e) => {
-                                error!("Error converting payload from {:?}: {:?}", packet.topic, e);
+    let mqtt_loop = thread::spawn(move || {
+        for (_i, notification) in connection.iter().enumerate() {
+            trace!("Notification = {:?}", notification);
+            match notification {
+                Ok(event) => {
+                    if let Event::Incoming(evt) = event {
+                        //println!("Incoming event = {:?}", evt);
+                        if let Packet::Publish(packet) = evt {
+                            let data_result = String::from_utf8(packet.payload.to_vec());
+                            match data_result {
+                                Ok(data) => {
+                                    trace!("{:?}: {:?}", packet.topic, data);
+                                    for switch in switches.iter_mut() {
+                                        switch.process(&mut client, &packet, &data);
+                                    }    
+                                },
+                                Err(e) => {
+                                    error!("Error converting payload from {:?}: {:?}", packet.topic, e);
+                                }
                             }
                         }
                     }
-                }
-            },
-            Err(_) => { break; }
-        }
-        for sig in signals.pending() {
-            debug!("Recevied signal {:?}", sig);
-            if sig == SIGTERM {
-                client.disconnect().unwrap();
-                break 'main;
+                },
+                Err(_) => { break; }
             }
+        }    
+    });
+
+    for sig in signals.forever() {
+        debug!("Recevied signal {:?}", sig);
+        if sig == SIGTERM {
+            //TODO how to use moved value
+            //client.disconnect().unwrap();
+            std::process::exit(0);
         }
-    }    
+    }
+
+    mqtt_loop.join().unwrap();
+   
 }
