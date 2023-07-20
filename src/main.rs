@@ -3,6 +3,7 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::path::Path;
 use std::thread;
+use std::sync::{Arc, Mutex};
 use rumqttc::{MqttOptions, Client, Packet};
 use rumqttc::Event;
 use yaml_rust::{Yaml, YamlLoader};
@@ -101,12 +102,17 @@ fn do_work(mqtt_config: MqttConfig, mut switches: Vec<Switch>) {
 
     let (mut client, mut connection) = Client::new(mqttoptions, 10);
     
+
     for switch in &switches {
         switch.add_subscriptions(&mut client);
     }
 
     let mut signals = Signals::new(&[SIGTERM]).unwrap();
-   
+
+    let client_arc = Arc::new(Mutex::new(client));
+
+    let thread_client = client_arc.clone();
+
     let mqtt_loop = thread::spawn(move || {
         for (_i, notification) in connection.iter().enumerate() {
             trace!("Notification = {:?}", notification);
@@ -120,7 +126,8 @@ fn do_work(mqtt_config: MqttConfig, mut switches: Vec<Switch>) {
                                 Ok(data) => {
                                     trace!("{:?}: {:?}", packet.topic, data);
                                     for switch in switches.iter_mut() {
-                                        switch.process(&mut client, &packet, &data);
+                                        let mut client_shared = thread_client.lock().unwrap();
+                                        switch.process(&mut client_shared, &packet, &data);
                                     }    
                                 },
                                 Err(e) => {
@@ -136,14 +143,15 @@ fn do_work(mqtt_config: MqttConfig, mut switches: Vec<Switch>) {
     });
 
     for sig in signals.forever() {
-        debug!("Recevied signal {:?}", sig);
+        info!("Recevied signal {:?}", sig);
         if sig == SIGTERM {
             //TODO how to use moved value
-            //client.disconnect().unwrap();
-            std::process::exit(0);
+            let mut client_shared = client_arc.lock().unwrap();
+            client_shared.disconnect().unwrap();
+            break;
         }
     }
 
-    mqtt_loop.join().unwrap();
-   
+    debug!("Joining processing thread");
+    mqtt_loop.join().unwrap(); 
 }
