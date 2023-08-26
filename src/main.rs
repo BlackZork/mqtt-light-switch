@@ -104,7 +104,7 @@ fn do_work(mqtt_config: MqttConfig, mut switches: Vec<Switch>) {
     
 
     for switch in &switches {
-        switch.add_subscriptions(&mut client, &mut connection);
+        switch.add_subscriptions(&mut client);
     }
 
     let mut signals = Signals::new(&[SIGTERM]).unwrap();

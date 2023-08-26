@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use rumqttc::{Client, QoS, Publish, Connection, Event};
+use rumqttc::{Client, QoS, Publish};
 use log::*;
 
 pub struct Switch {
@@ -22,25 +22,9 @@ impl Switch {
         }
     }
 
-    pub fn subscribe(&self, topic: &str, client: &mut Client, connection: &mut Connection) {
-        client.subscribe(topic, QoS::AtLeastOnce).unwrap();
-        // without loop subscribe hangs after 10 calls to client.subscribe()
-        for (_i, notification) in connection.iter().enumerate() {
-            match notification {
-                Ok(event) => {
-                    if let Event::Outgoing(_evt) = event {
-                        debug!("Subscribed to {:?} ", topic);
-                        break;
-                    }
-                },
-                Err(_) => { break; }
-            }
-        }
-    }
-
-    pub fn add_subscriptions(&self, client: &mut Client, connection: &mut Connection) {
-        self.subscribe(self.counter_topic.as_str(), client, connection);
-        self.subscribe(self.light_state_topic.as_str(), client, connection);
+    pub fn add_subscriptions(&self, client: &mut Client) {
+        client.subscribe(self.counter_topic.as_str(), QoS::AtLeastOnce).unwrap();
+        client.subscribe(self.light_state_topic.as_str(), QoS::AtLeastOnce).unwrap();
     }
 
     pub fn process(&mut self, client: &mut Client, packet: &Publish, data: &str) {
