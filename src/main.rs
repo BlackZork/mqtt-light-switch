@@ -97,21 +97,19 @@ fn read_switch_config(doc: &Yaml) -> Vec<Switch> {
     return switches;
 }
 
-fn do_work(mqtt_config: MqttConfig, mut switches: Vec<Switch>) {
+fn do_work(mqtt_config: MqttConfig, switches: Vec<Switch>) {
     let mqttoptions = MqttOptions::new("mqtt-light-switches", mqtt_config.host, mqtt_config.port);
 
-    let (mut client, mut connection) = Client::new(mqttoptions, 10);
+    let (client, mut connection) = Client::new(mqttoptions, 10);
     
-
-    for switch in &switches {
-        switch.add_subscriptions(&mut client);
-    }
 
     let mut signals = Signals::new(&[SIGTERM]).unwrap();
 
     let client_arc = Arc::new(Mutex::new(client));
-
     let thread_client = client_arc.clone();
+
+    let switches_arc = Arc::new(Mutex::new(switches));
+    let thread_switches = switches_arc.clone();
 
     let mqtt_loop = thread::spawn(move || {
         for (_i, notification) in connection.iter().enumerate() {
@@ -125,7 +123,8 @@ fn do_work(mqtt_config: MqttConfig, mut switches: Vec<Switch>) {
                             match data_result {
                                 Ok(data) => {
                                     trace!("{:?}: {:?}", packet.topic, data);
-                                    for switch in switches.iter_mut() {
+                                    let mut switches_shared = thread_switches.lock().unwrap();
+                                    for switch in switches_shared.iter_mut() {
                                         let mut client_shared = thread_client.lock().unwrap();
                                         switch.process(&mut client_shared, &packet, &data);
                                     }    
@@ -141,6 +140,17 @@ fn do_work(mqtt_config: MqttConfig, mut switches: Vec<Switch>) {
             }
         }    
     });
+
+    // must be done after main loop is started, because subscribe needs main loop
+    // processing
+    {
+        let mut switches_shared = switches_arc.lock().unwrap();
+        let mut client_shared = client_arc.lock().unwrap();
+        for switch in switches_shared.iter_mut() {
+            switch.add_subscriptions(&mut client_shared);
+        }
+    }
+
 
     for sig in signals.forever() {
         info!("Recevied signal {:?}", sig);
