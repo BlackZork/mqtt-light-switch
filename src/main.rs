@@ -3,6 +3,7 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::path::Path;
 use std::thread;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use rumqttc::{MqttOptions, Client, Packet};
 use rumqttc::Event;
@@ -32,17 +33,21 @@ struct MqttConfig {
     port: u16
 }
 
+struct LogConfig {
+    level: String
+}
+
 fn main() {
     let cli = Cli::parse();
 
     let verbosity: usize = 2 + usize::from(cli.verbose);
 
-    stderrlog::new()
-        .module(module_path!())
-        .verbosity(verbosity)
-        .init()
-        .unwrap();
-
+    let mut log_handler = stderrlog::new();
+    log_handler.module(module_path!());
+    if cli.verbose != 0 {
+        log_handler.verbosity(verbosity);
+        log_handler.init().unwrap();
+    }
 
     let mut config_path = Path::new("/etc/mqtt-light-switch.yaml");
     if let Some(arg_config_path) = cli.config.as_deref() {
@@ -52,6 +57,13 @@ fn main() {
     info!("Using configuration file {:?}", config_path);
 
     let config = read_config(config_path); 
+
+    if cli.verbose == 0 {
+        let log_config = read_log_config(&config);
+        let new_level = log::LevelFilter::from_str(log_config.level.as_str()).unwrap();
+        log_handler.verbosity(new_level);
+        log_handler.init().unwrap();
+    }
 
     let mqtt_config = read_mqtt_config(&config);
     let switches: Vec<Switch> = read_switch_config(&config);
@@ -77,6 +89,14 @@ fn read_mqtt_config(doc: &Yaml) -> MqttConfig {
     return MqttConfig {
         host: String::from(conf["host"].as_str().unwrap()),
         port: u16::try_from(conf["port"].as_i64().unwrap()).unwrap()
+    }
+}
+
+fn read_log_config(doc: &Yaml) -> LogConfig {
+    let conf = &doc["log"];
+
+    return LogConfig { 
+        level: String::from(conf["level"].as_str().unwrap())
     }
 }
 
