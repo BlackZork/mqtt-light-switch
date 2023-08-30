@@ -34,7 +34,7 @@ impl Switch {
             debug!("Light {:?} initial state changed to {:?}", self.light_state_topic, self.is_light_on);
         }
         if packet.topic == self.counter_topic {
-            if packet.retain {
+            if packet.retain || self.counter_value == "" {
                 debug!("Switch {:?} initial value is {:?}", packet.topic, data);
                 self.counter_value = String::from_str(data).unwrap();
             } else if self.counter_value != data {
