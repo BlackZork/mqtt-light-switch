@@ -2,7 +2,8 @@ use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 use std::path::Path;
-use std::thread;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::{thread, time};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use rumqttc::{MqttOptions, Client, Packet};
@@ -121,7 +122,6 @@ fn do_work(mqtt_config: MqttConfig, switches: Vec<Switch>) {
     let mqttoptions = MqttOptions::new("mqtt-light-switches", mqtt_config.host, mqtt_config.port);
 
     let (client, mut connection) = Client::new(mqttoptions, 10);
-    
 
     let mut signals = Signals::new(&[SIGTERM]).unwrap();
 
@@ -130,6 +130,9 @@ fn do_work(mqtt_config: MqttConfig, switches: Vec<Switch>) {
 
     let switches_arc = Arc::new(Mutex::new(switches));
     let thread_switches = switches_arc.clone();
+
+    let exit_request = Arc::new(AtomicBool::new(false));
+    let thread_exit_request = exit_request.clone();
 
     let mqtt_loop = thread::spawn(move || {
         for (_i, notification) in connection.iter().enumerate() {
@@ -156,7 +159,14 @@ fn do_work(mqtt_config: MqttConfig, switches: Vec<Switch>) {
                         }
                     }
                 },
-                Err(_) => { break; }
+                Err(event) => { 
+                    if thread_exit_request.load(Ordering::Relaxed) == true {
+                        break; 
+                    } else {
+                        warn!("Connection error {:?}, reconnecting", event);
+                        thread::sleep(time::Duration::from_secs(5));
+                    }
+                }
             }
         }    
     });
@@ -177,6 +187,7 @@ fn do_work(mqtt_config: MqttConfig, switches: Vec<Switch>) {
         if sig == SIGTERM {
             //TODO how to use moved value
             let mut client_shared = client_arc.lock().unwrap();
+            exit_request.store(true, Ordering::Relaxed);
             client_shared.disconnect().unwrap();
             break;
         }
